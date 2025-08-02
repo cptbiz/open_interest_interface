@@ -536,16 +536,17 @@ class OpenInterestAnalyzer {
             
             // Start Express server
             this.app.listen(ENV.PORT, () => {
+                const baseUrl = process.env.RAILWAY_STATIC_URL || `http://localhost:${ENV.PORT}`;
                 console.log(`🌐 Open Interest Analyzer running on port ${ENV.PORT}`);
-                console.log(`📊 Health check: http://localhost:${ENV.PORT}/health`);
-                console.log(`📈 Open Interest: http://localhost:${ENV.PORT}/api/open-interest`);
-                console.log(`💰 Funding Rates: http://localhost:${ENV.PORT}/api/funding-rates`);
-                console.log(`⚖️ Long/Short Ratio: http://localhost:${ENV.PORT}/api/long-short-ratio`);
-                console.log(`📊 Analysis: http://localhost:${ENV.PORT}/api/analysis`);
-                console.log(`😊 Sentiment: http://localhost:${ENV.PORT}/api/sentiment`);
-                console.log(`🤖 OpenAI Analysis: http://localhost:${ENV.PORT}/api/openai-analysis`);
-                console.log(`📋 OpenAI Report: http://localhost:${ENV.PORT}/api/openai-report`);
-                console.log(`🔄 Force Update: POST http://localhost:${ENV.PORT}/api/force-update`);
+                console.log(`📊 Health check: ${baseUrl}/health`);
+                console.log(`📈 Open Interest: ${baseUrl}/api/open-interest`);
+                console.log(`💰 Funding Rates: ${baseUrl}/api/funding-rates`);
+                console.log(`⚖️ Long/Short Ratio: ${baseUrl}/api/long-short-ratio`);
+                console.log(`📊 Analysis: ${baseUrl}/api/analysis`);
+                console.log(`😊 Sentiment: ${baseUrl}/api/sentiment`);
+                console.log(`🤖 OpenAI Analysis: ${baseUrl}/api/openai-analysis`);
+                console.log(`📋 OpenAI Report: ${baseUrl}/api/openai-report`);
+                console.log(`🔄 Force Update: POST ${baseUrl}/api/force-update`);
             });
             
             this.isRunning = true;
