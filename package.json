@@ -5,7 +5,8 @@
   "main": "chatwoot-webhook.js",
   "scripts": {
     "start": "node chatwoot-webhook.js",
-    "dev": "nodemon chatwoot-webhook.js"
+    "dev": "nodemon chatwoot-webhook.js",
+    "build": "echo 'Build completed'"
   },
   "dependencies": {
     "express": "^4.18.2",
@@ -16,7 +17,10 @@
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["chatwoot", "webhook", "whatsapp"],
-  "author": "",
-  "license": "ISC"
+  "keywords": ["chatwoot", "webhook", "whatsapp", "railway"],
+  "author": "Bagrat",
+  "license": "ISC",
+  "engines": {
+    "node": ">=16.0.0"
+  }
 } 

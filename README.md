@@ -51,12 +51,45 @@ npm run dev
 
 ### Деплой на Railway
 
-1. **Подключите репозиторий к Railway**
-2. **Настройте переменные окружения в Railway Dashboard:**
-   - `CHATWOOT_BASE_URL`
-   - `CHATWOOT_ACCESS_TOKEN`
-   - `CHATWOOT_ACCOUNT_ID`
-   - `PORT` (автоматически устанавливается Railway)
+#### Автоматический деплой через GitHub
+
+1. **Перейдите на [Railway.app](https://railway.app)**
+2. **Нажмите "New Project" → "Deploy from GitHub repo"**
+3. **Выберите репозиторий: `cptbiz/open_interest_interface`**
+4. **Настройте переменные окружения в Railway Dashboard:**
+   - `CHATWOOT_BASE_URL` - URL вашего Chatwoot инстанса
+   - `CHATWOOT_ACCESS_TOKEN` - токен доступа к Chatwoot API
+   - `CHATWOOT_ACCOUNT_ID` - ID аккаунта в Chatwoot
+   - `PORT` - автоматически устанавливается Railway
+
+#### Деплой через Railway CLI
+
+1. **Установите Railway CLI:**
+```bash
+npm install -g @railway/cli
+```
+
+2. **Войдите в Railway:**
+```bash
+railway login
+```
+
+3. **Инициализируйте проект:**
+```bash
+railway init
+```
+
+4. **Деплойте проект:**
+```bash
+railway up
+```
+
+5. **Настройте переменные окружения:**
+```bash
+railway variables set CHATWOOT_BASE_URL=https://app.chatwoot.com
+railway variables set CHATWOOT_ACCESS_TOKEN=your_token_here
+railway variables set CHATWOOT_ACCOUNT_ID=your_account_id_here
+```
 
 ## 📡 API Endpoints
 
