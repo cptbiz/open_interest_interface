@@ -1,25 +1,38 @@
 {
-  "name": "chatwoot-webhook",
+  "name": "open-interest-interface",
   "version": "1.0.0",
-  "description": "Webhook server for Chatwoot.com",
-  "main": "chatwoot-webhook.js",
+  "description": "Real-time Open Interest data collector from major cryptocurrency exchanges",
+  "main": "open_interest_collector.js",
   "scripts": {
-    "start": "node chatwoot-webhook.js",
-    "dev": "nodemon chatwoot-webhook.js",
-    "build": "echo 'Build completed'"
+    "start": "node open_interest_collector.js",
+    "dev": "nodemon open_interest_collector.js",
+    "init-db": "node init_database.js",
+    "test": "node test_connection.js"
   },
+  "keywords": [
+    "open-interest",
+    "cryptocurrency",
+    "trading",
+    "websocket",
+    "binance",
+    "bybit",
+    "okx",
+    "futures",
+    "derivatives"
+  ],
+  "author": "Bagrat",
+  "license": "MIT",
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
     "axios": "^1.6.0",
+    "ws": "^8.14.2",
+    "pg": "^8.11.3",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
-  "keywords": ["chatwoot", "webhook", "whatsapp", "railway"],
-  "author": "Bagrat",
-  "license": "ISC",
   "engines": {
     "node": ">=16.0.0"
   }

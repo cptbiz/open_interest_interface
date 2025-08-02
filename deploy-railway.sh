@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# 🚀 Railway Deploy Script для Chatwoot Webhook Interface
+# 🚀 Railway Deploy Script для Open Interest Interface
 # Автор: Bagrat
 
 set -e
 
-echo "🚀 Начинаем деплой на Railway..."
+echo "🚀 Начинаем деплой Open Interest Interface на Railway..."
 
 # Проверяем наличие Railway CLI
 if ! command -v railway &> /dev/null; then
@@ -45,9 +45,9 @@ if [ -f ".env" ]; then
     done < .env
 else
     echo "⚠️ .env файл не найден. Настройте переменные вручную:"
-    echo "   railway variables set CHATWOOT_BASE_URL=https://app.chatwoot.com"
-    echo "   railway variables set CHATWOOT_ACCESS_TOKEN=your_token_here"
-    echo "   railway variables set CHATWOOT_ACCOUNT_ID=your_account_id_here"
+    echo "   railway variables set DATABASE_URL=your_postgresql_connection_string"
+    echo "   railway variables set NODE_ENV=production"
+    echo "   railway variables set PORT=3000"
 fi
 
 # Получаем URL деплоя
@@ -55,8 +55,12 @@ echo "🌐 Получаем URL деплоя..."
 railway status
 
 echo "✅ Деплой завершен!"
-echo "📱 Ваш webhook URL будет доступен по адресу:"
-echo "   https://your-app-name.railway.app/webhook"
+echo "📊 Ваш Open Interest Interface будет доступен по адресу:"
+echo "   https://your-app-name.railway.app"
 echo ""
-echo "🔧 Для настройки webhook в Chatwoot используйте:"
-echo "   https://your-app-name.railway.app/webhook" 
+echo "🔗 API Endpoints:"
+echo "   Health Check: https://your-app-name.railway.app/health"
+echo "   Open Interest: https://your-app-name.railway.app/api/open-interest"
+echo "   Funding Rates: https://your-app-name.railway.app/api/funding-rates"
+echo "   Long/Short Ratio: https://your-app-name.railway.app/api/long-short-ratio"
+echo "   Statistics: https://your-app-name.railway.app/api/stats" 

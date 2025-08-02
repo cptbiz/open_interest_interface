@@ -1,1 +1,1 @@
-web: node chatwoot-webhook.js 
+web: node open_interest_collector.js 

@@ -62,4 +62,12 @@ ehthumbs.db
 Thumbs.db
 
 # Railway
-.railway/ 
+.railway/
+
+# Database
+*.db
+*.sqlite
+
+# Test files
+test-results/
+coverage/ 
