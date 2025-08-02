@@ -1,14 +1,16 @@
 {
   "name": "open-interest-interface",
   "version": "1.0.0",
-  "description": "Real-time Open Interest analyzer without database storage",
+  "description": "Real-time Open Interest analyzer with OpenAI integration",
   "main": "open_interest_collector.js",
   "scripts": {
     "start": "node open_interest_collector.js",
     "dev": "nodemon open_interest_collector.js",
     "init-db": "node init_database.js",
     "test": "node test_connection.js",
-    "test-local": "node test_local.js"
+    "test-local": "node test_local.js",
+    "demo": "node demo_api.js",
+    "demo-openai": "node demo_openai_api.js"
   },
   "keywords": [
     "open-interest",
@@ -28,7 +30,8 @@
     "cors": "^2.8.5",
     "axios": "^1.6.0",
     "ws": "^8.14.2",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "openai": "^4.28.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

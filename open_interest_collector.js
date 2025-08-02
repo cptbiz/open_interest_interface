@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+const OpenAIAnalyzer = require('./openai_analyzer.js');
 
 console.log('🚀 Starting Open Interest Real-time Analyzer...');
 console.log('📊 Real-time analysis without database storage');
@@ -65,6 +66,7 @@ class OpenInterestAnalyzer {
         this.setupExpress();
         this.startTime = new Date();
         this.lastRestUpdate = new Date();
+        this.openaiAnalyzer = new OpenAIAnalyzer();
     }
 
     setupExpress() {
@@ -149,6 +151,50 @@ class OpenInterestAnalyzer {
                 sentiment,
                 timestamp: new Date().toISOString()
             });
+        });
+
+        // Get OpenAI analysis
+        this.app.get('/api/openai-analysis', async (req, res) => {
+            try {
+                const data = {
+                    openInterest: Array.from(openInterestData.values()),
+                    fundingRates: Array.from(fundingRateData.values()),
+                    longShortRatio: Array.from(longShortRatioData.values())
+                };
+                
+                const analysis = await this.openaiAnalyzer.analyzeOpenInterest(data);
+                res.json({
+                    analysis,
+                    timestamp: new Date().toISOString()
+                });
+            } catch (error) {
+                res.status(500).json({
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        });
+
+        // Get OpenAI market report
+        this.app.get('/api/openai-report', async (req, res) => {
+            try {
+                const data = {
+                    openInterest: Array.from(openInterestData.values()),
+                    fundingRates: Array.from(fundingRateData.values()),
+                    longShortRatio: Array.from(longShortRatioData.values())
+                };
+                
+                const report = await this.openaiAnalyzer.generateMarketReport(data);
+                res.json({
+                    report,
+                    timestamp: new Date().toISOString()
+                });
+            } catch (error) {
+                res.status(500).json({
+                    error: error.message,
+                    timestamp: new Date().toISOString()
+                });
+            }
         });
 
         // Force update from REST APIs
@@ -497,6 +543,8 @@ class OpenInterestAnalyzer {
                 console.log(`⚖️ Long/Short Ratio: http://localhost:${ENV.PORT}/api/long-short-ratio`);
                 console.log(`📊 Analysis: http://localhost:${ENV.PORT}/api/analysis`);
                 console.log(`😊 Sentiment: http://localhost:${ENV.PORT}/api/sentiment`);
+                console.log(`🤖 OpenAI Analysis: http://localhost:${ENV.PORT}/api/openai-analysis`);
+                console.log(`📋 OpenAI Report: http://localhost:${ENV.PORT}/api/openai-report`);
                 console.log(`🔄 Force Update: POST http://localhost:${ENV.PORT}/api/force-update`);
             });
             
