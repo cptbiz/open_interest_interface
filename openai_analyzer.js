@@ -2,18 +2,27 @@ const OpenAI = require('openai');
 
 class OpenAIAnalyzer {
     constructor() {
-        this.openai = new OpenAI({
-            apiKey: process.env.OPENAI_API_KEY
-        });
         this.isAvailable = !!process.env.OPENAI_API_KEY;
+        if (this.isAvailable) {
+            this.openai = new OpenAI({
+                apiKey: process.env.OPENAI_API_KEY
+            });
+        } else {
+            console.log('⚠️ OpenAI API key not configured. AI features will be disabled.');
+        }
     }
 
     async analyzeOpenInterest(data) {
         if (!this.isAvailable) {
             return {
-                analysis: "OpenAI API key not configured",
+                analysis: "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to enable AI analysis.",
                 sentiment: "neutral",
-                recommendations: []
+                recommendations: [
+                    "Настройте OpenAI API ключ для получения AI анализа",
+                    "Используйте /api/analysis для базового анализа",
+                    "Используйте /api/sentiment для анализа настроений"
+                ],
+                timestamp: new Date().toISOString()
             };
         }
 
@@ -48,10 +57,15 @@ class OpenAIAnalyzer {
         } catch (error) {
             console.error('❌ OpenAI API error:', error.message);
             return {
-                analysis: "Ошибка анализа OpenAI API",
+                analysis: "Ошибка анализа OpenAI API: " + error.message,
                 sentiment: "neutral",
-                recommendations: [],
-                error: error.message
+                recommendations: [
+                    "Проверьте правильность OpenAI API ключа",
+                    "Убедитесь, что у вас есть баланс на аккаунте",
+                    "Попробуйте позже или обратитесь в поддержку"
+                ],
+                error: error.message,
+                timestamp: new Date().toISOString()
             };
         }
     }
@@ -118,8 +132,9 @@ class OpenAIAnalyzer {
     async generateMarketReport(data) {
         if (!this.isAvailable) {
             return {
-                report: "OpenAI API key not configured",
-                summary: "No analysis available"
+                report: "OpenAI API key not configured. Please set OPENAI_API_KEY environment variable to enable AI reports.",
+                summary: "No AI analysis available",
+                timestamp: new Date().toISOString()
             };
         }
 
@@ -160,8 +175,10 @@ class OpenAIAnalyzer {
         } catch (error) {
             console.error('❌ OpenAI report error:', error.message);
             return {
-                report: "Ошибка генерации отчета",
-                error: error.message
+                report: "Ошибка генерации отчета: " + error.message,
+                summary: "AI report generation failed",
+                error: error.message,
+                timestamp: new Date().toISOString()
             };
         }
     }
