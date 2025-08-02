@@ -7,7 +7,8 @@
     "start": "node open_interest_collector.js",
     "dev": "nodemon open_interest_collector.js",
     "init-db": "node init_database.js",
-    "test": "node test_connection.js"
+    "test": "node test_connection.js",
+    "test-local": "node test_local.js"
   },
   "keywords": [
     "open-interest",
