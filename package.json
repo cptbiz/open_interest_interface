@@ -10,7 +10,8 @@
     "test": "node test_connection.js",
     "test-local": "node test_local.js",
     "demo": "node demo_api.js",
-    "demo-openai": "node demo_openai_api.js"
+    "demo-openai": "node demo_openai_api.js",
+    "railway-demo": "node railway_demo.js"
   },
   "keywords": [
     "open-interest",

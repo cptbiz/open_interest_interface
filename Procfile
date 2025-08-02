@@ -1,1 +1,1 @@
-web: node open_interest_collector.js 
+web: node railway_demo.js 
