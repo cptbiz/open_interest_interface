@@ -1,16 +1,14 @@
 const WebSocket = require('ws');
-const { Pool } = require('pg');
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 
-console.log('🚀 Starting Open Interest Data Collector...');
-console.log('📊 Real-time Open Interest from major exchanges');
+console.log('🚀 Starting Open Interest Real-time Analyzer...');
+console.log('📊 Real-time analysis without database storage');
 console.log('🔄 Railway deployment ready - ' + new Date().toISOString());
 
 // ==================== ENVIRONMENT VARIABLES ====================
 const ENV = {
-    DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV || 'production',
     PORT: process.env.PORT || 3000,
     LOG_LEVEL: process.env.LOG_LEVEL || 'info',
@@ -18,15 +16,6 @@ const ENV = {
     API_RATE_LIMIT: parseInt(process.env.API_RATE_LIMIT) || 100,
     API_TIMEOUT: parseInt(process.env.API_TIMEOUT) || 30000
 };
-
-// ==================== DATABASE CONFIGURATION ====================
-const pool = new Pool({
-    connectionString: ENV.DATABASE_URL,
-    ssl: ENV.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-});
 
 // ==================== TRADING PAIRS ====================
 const tradingPairs = [
@@ -58,22 +47,23 @@ const exchanges = {
     }
 };
 
-// ==================== DATA STORAGE ====================
+// ==================== IN-MEMORY DATA STORAGE ====================
 const openInterestData = new Map();
 const fundingRateData = new Map();
 const longShortRatioData = new Map();
+const analysisData = new Map();
 
 // ==================== WEB SOCKET CONNECTIONS ====================
 let binanceWS = null;
 let bybitWS = null;
 let okxWS = null;
 
-class OpenInterestCollector {
+class OpenInterestAnalyzer {
     constructor() {
         this.isRunning = false;
-        this.pool = pool;
         this.app = express();
         this.setupExpress();
+        this.startTime = new Date();
     }
 
     setupExpress() {
@@ -85,9 +75,10 @@ class OpenInterestCollector {
             res.json({
                 status: 'OK',
                 timestamp: new Date().toISOString(),
-                service: 'Open Interest Collector',
+                service: 'Open Interest Real-time Analyzer',
                 exchanges: Object.keys(exchanges),
-                dataPoints: openInterestData.size
+                dataPoints: openInterestData.size,
+                uptime: Date.now() - this.startTime.getTime()
             });
         });
 
@@ -134,151 +125,175 @@ class OpenInterestCollector {
             });
         });
 
+        // Get real-time analysis
+        this.app.get('/api/analysis', (req, res) => {
+            const analysis = this.generateAnalysis();
+            res.json({
+                analysis,
+                timestamp: new Date().toISOString()
+            });
+        });
+
         // Get statistics
-        this.app.get('/api/stats', async (req, res) => {
-            try {
-                const stats = await this.getStats();
-                res.json(stats);
-            } catch (error) {
-                res.status(500).json({ error: error.message });
-            }
+        this.app.get('/api/stats', (req, res) => {
+            const stats = this.getStats();
+            res.json(stats);
+        });
+
+        // Get market sentiment
+        this.app.get('/api/sentiment', (req, res) => {
+            const sentiment = this.calculateMarketSentiment();
+            res.json({
+                sentiment,
+                timestamp: new Date().toISOString()
+            });
         });
     }
 
-    async initDatabase() {
-        try {
-            console.log('🗄️ Initializing database...');
-            
-            const createTablesSQL = `
-                CREATE TABLE IF NOT EXISTS open_interest (
-                    id SERIAL PRIMARY KEY,
-                    exchange VARCHAR(50) NOT NULL,
-                    symbol VARCHAR(20) NOT NULL,
-                    open_interest DECIMAL(20,8),
-                    open_interest_value DECIMAL(20,8),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS funding_rates (
-                    id SERIAL PRIMARY KEY,
-                    exchange VARCHAR(50) NOT NULL,
-                    symbol VARCHAR(20) NOT NULL,
-                    funding_rate DECIMAL(10,8),
-                    next_funding_time BIGINT,
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE TABLE IF NOT EXISTS long_short_ratio (
-                    id SERIAL PRIMARY KEY,
-                    exchange VARCHAR(50) NOT NULL,
-                    symbol VARCHAR(20) NOT NULL,
-                    long_ratio DECIMAL(10,8),
-                    short_ratio DECIMAL(10,8),
-                    long_short_ratio DECIMAL(10,8),
-                    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-
-                CREATE INDEX IF NOT EXISTS idx_open_interest_exchange_symbol ON open_interest(exchange, symbol);
-                CREATE INDEX IF NOT EXISTS idx_funding_rates_exchange_symbol ON funding_rates(exchange, symbol);
-                CREATE INDEX IF NOT EXISTS idx_long_short_ratio_exchange_symbol ON long_short_ratio(exchange, symbol);
-            `;
-
-            await this.pool.query(createTablesSQL);
-            console.log('✅ Database initialized successfully');
-            
-        } catch (error) {
-            console.error('❌ Database initialization error:', error);
-            throw error;
-        }
+    updateOpenInterest(exchange, symbol, openInterest, openInterestValue) {
+        const key = `${exchange}_${symbol}`;
+        const data = {
+            exchange,
+            symbol,
+            openInterest,
+            openInterestValue,
+            timestamp: new Date().toISOString(),
+            price: openInterestValue / openInterest // Estimated price
+        };
+        
+        openInterestData.set(key, data);
+        console.log(`📊 ${exchange} OI: ${symbol} = ${openInterest} (${openInterestValue} USDT)`);
     }
 
-    async saveOpenInterest(exchange, symbol, openInterest, openInterestValue) {
-        try {
-            const query = `
-                INSERT INTO open_interest (exchange, symbol, open_interest, open_interest_value)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (exchange, symbol) 
-                DO UPDATE SET 
-                    open_interest = EXCLUDED.open_interest,
-                    open_interest_value = EXCLUDED.open_interest_value,
-                    timestamp = CURRENT_TIMESTAMP
-            `;
-            
-            await this.pool.query(query, [exchange, symbol, openInterest, openInterestValue]);
-            
-            // Update cache
-            openInterestData.set(`${exchange}_${symbol}`, {
-                exchange,
-                symbol,
-                openInterest,
-                openInterestValue,
-                timestamp: new Date().toISOString()
-            });
-            
-        } catch (error) {
-            console.error(`❌ Error saving open interest for ${exchange} ${symbol}:`, error);
-        }
+    updateFundingRate(exchange, symbol, fundingRate, nextFundingTime) {
+        const key = `${exchange}_${symbol}`;
+        const data = {
+            exchange,
+            symbol,
+            fundingRate,
+            nextFundingTime,
+            timestamp: new Date().toISOString()
+        };
+        
+        fundingRateData.set(key, data);
+        console.log(`💰 ${exchange} FR: ${symbol} = ${fundingRate}%`);
     }
 
-    async saveFundingRate(exchange, symbol, fundingRate, nextFundingTime) {
-        try {
-            const query = `
-                INSERT INTO funding_rates (exchange, symbol, funding_rate, next_funding_time)
-                VALUES ($1, $2, $3, $4)
-                ON CONFLICT (exchange, symbol) 
-                DO UPDATE SET 
-                    funding_rate = EXCLUDED.funding_rate,
-                    next_funding_time = EXCLUDED.next_funding_time,
-                    timestamp = CURRENT_TIMESTAMP
-            `;
-            
-            await this.pool.query(query, [exchange, symbol, fundingRate, nextFundingTime]);
-            
-            // Update cache
-            fundingRateData.set(`${exchange}_${symbol}`, {
-                exchange,
-                symbol,
-                fundingRate,
-                nextFundingTime,
-                timestamp: new Date().toISOString()
-            });
-            
-        } catch (error) {
-            console.error(`❌ Error saving funding rate for ${exchange} ${symbol}:`, error);
-        }
+    updateLongShortRatio(exchange, symbol, longRatio, shortRatio, longShortRatio) {
+        const key = `${exchange}_${symbol}`;
+        const data = {
+            exchange,
+            symbol,
+            longRatio,
+            shortRatio,
+            longShortRatio,
+            timestamp: new Date().toISOString()
+        };
+        
+        longShortRatioData.set(key, data);
+        console.log(`⚖️ ${exchange} L/S: ${symbol} = ${longShortRatio}`);
     }
 
-    async saveLongShortRatio(exchange, symbol, longRatio, shortRatio, longShortRatio) {
-        try {
-            const query = `
-                INSERT INTO long_short_ratio (exchange, symbol, long_ratio, short_ratio, long_short_ratio)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (exchange, symbol) 
-                DO UPDATE SET 
-                    long_ratio = EXCLUDED.long_ratio,
-                    short_ratio = EXCLUDED.short_ratio,
-                    long_short_ratio = EXCLUDED.long_short_ratio,
-                    timestamp = CURRENT_TIMESTAMP
-            `;
-            
-            await this.pool.query(query, [exchange, symbol, longRatio, shortRatio, longShortRatio]);
-            
-            // Update cache
-            longShortRatioData.set(`${exchange}_${symbol}`, {
-                exchange,
-                symbol,
-                longRatio,
-                shortRatio,
-                longShortRatio,
-                timestamp: new Date().toISOString()
-            });
-            
-        } catch (error) {
-            console.error(`❌ Error saving long/short ratio for ${exchange} ${symbol}:`, error);
+    generateAnalysis() {
+        const analysis = {
+            totalOpenInterest: 0,
+            totalFundingRate: 0,
+            averageLongShortRatio: 0,
+            topGainers: [],
+            topLosers: [],
+            marketTrend: 'neutral',
+            exchanges: {}
+        };
+
+        // Calculate totals
+        let totalOI = 0;
+        let totalFR = 0;
+        let totalLSR = 0;
+        let count = 0;
+
+        openInterestData.forEach((data) => {
+            totalOI += data.openInterestValue || 0;
+        });
+
+        fundingRateData.forEach((data) => {
+            totalFR += data.fundingRate || 0;
+            count++;
+        });
+
+        longShortRatioData.forEach((data) => {
+            totalLSR += data.longShortRatio || 0;
+        });
+
+        analysis.totalOpenInterest = totalOI;
+        analysis.totalFundingRate = count > 0 ? totalFR / count : 0;
+        analysis.averageLongShortRatio = longShortRatioData.size > 0 ? totalLSR / longShortRatioData.size : 0;
+
+        // Determine market trend
+        if (analysis.totalFundingRate > 0.01) {
+            analysis.marketTrend = 'bullish';
+        } else if (analysis.totalFundingRate < -0.01) {
+            analysis.marketTrend = 'bearish';
+        } else {
+            analysis.marketTrend = 'neutral';
         }
+
+        return analysis;
+    }
+
+    calculateMarketSentiment() {
+        const sentiment = {
+            bullish: 0,
+            bearish: 0,
+            neutral: 0,
+            total: 0,
+            overall: 'neutral'
+        };
+
+        fundingRateData.forEach((data) => {
+            sentiment.total++;
+            if (data.fundingRate > 0.01) {
+                sentiment.bullish++;
+            } else if (data.fundingRate < -0.01) {
+                sentiment.bearish++;
+            } else {
+                sentiment.neutral++;
+            }
+        });
+
+        // Determine overall sentiment
+        if (sentiment.bullish > sentiment.bearish && sentiment.bullish > sentiment.neutral) {
+            sentiment.overall = 'bullish';
+        } else if (sentiment.bearish > sentiment.bullish && sentiment.bearish > sentiment.neutral) {
+            sentiment.overall = 'bearish';
+        } else {
+            sentiment.overall = 'neutral';
+        }
+
+        return sentiment;
+    }
+
+    getStats() {
+        return {
+            openInterest: {
+                total: openInterestData.size,
+                exchanges: Object.keys(exchanges)
+            },
+            fundingRates: {
+                total: fundingRateData.size,
+                exchanges: Object.keys(exchanges)
+            },
+            longShortRatio: {
+                total: longShortRatioData.size,
+                exchanges: Object.keys(exchanges)
+            },
+            analysis: {
+                total: analysisData.size
+            },
+            exchanges: Object.keys(exchanges),
+            tradingPairs: tradingPairs.length,
+            uptime: Date.now() - this.startTime.getTime(),
+            timestamp: new Date().toISOString()
+        };
     }
 
     initializeBinanceWS() {
@@ -299,8 +314,7 @@ class OpenInterestCollector {
                     const message = JSON.parse(data);
                     if (message.data) {
                         const { symbol, openInterest, openInterestValue } = message.data;
-                        await this.saveOpenInterest('binance', symbol, openInterest, openInterestValue);
-                        console.log(`📊 Binance OI: ${symbol} = ${openInterest}`);
+                        this.updateOpenInterest('binance', symbol, openInterest, openInterestValue);
                     }
                 } catch (error) {
                     console.error('❌ Binance message error:', error);
@@ -345,8 +359,7 @@ class OpenInterestCollector {
                     if (message.data && message.data.length > 0) {
                         for (const item of message.data) {
                             const { symbol, openInterest, openInterestValue } = item;
-                            await this.saveOpenInterest('bybit', symbol, openInterest, openInterestValue);
-                            console.log(`📊 Bybit OI: ${symbol} = ${openInterest}`);
+                            this.updateOpenInterest('bybit', symbol, openInterest, openInterestValue);
                         }
                     }
                 } catch (error) {
@@ -368,41 +381,9 @@ class OpenInterestCollector {
         }
     }
 
-    async getStats() {
-        try {
-            const openInterestCount = await this.pool.query('SELECT COUNT(*) FROM open_interest');
-            const fundingRatesCount = await this.pool.query('SELECT COUNT(*) FROM funding_rates');
-            const longShortRatioCount = await this.pool.query('SELECT COUNT(*) FROM long_short_ratio');
-            
-            return {
-                openInterest: {
-                    total: parseInt(openInterestCount.rows[0].count),
-                    cached: openInterestData.size
-                },
-                fundingRates: {
-                    total: parseInt(fundingRatesCount.rows[0].count),
-                    cached: fundingRateData.size
-                },
-                longShortRatio: {
-                    total: parseInt(longShortRatioCount.rows[0].count),
-                    cached: longShortRatioData.size
-                },
-                exchanges: Object.keys(exchanges),
-                tradingPairs: tradingPairs.length,
-                timestamp: new Date().toISOString()
-            };
-        } catch (error) {
-            console.error('❌ Error getting stats:', error);
-            throw error;
-        }
-    }
-
     async start() {
         try {
-            console.log('🚀 Starting Open Interest Collector...');
-            
-            // Initialize database
-            await this.initDatabase();
+            console.log('🚀 Starting Open Interest Real-time Analyzer...');
             
             // Initialize WebSocket connections
             this.initializeBinanceWS();
@@ -410,53 +391,54 @@ class OpenInterestCollector {
             
             // Start Express server
             this.app.listen(ENV.PORT, () => {
-                console.log(`🌐 Open Interest API running on port ${ENV.PORT}`);
+                console.log(`🌐 Open Interest Analyzer running on port ${ENV.PORT}`);
                 console.log(`📊 Health check: http://localhost:${ENV.PORT}/health`);
                 console.log(`📈 Open Interest: http://localhost:${ENV.PORT}/api/open-interest`);
                 console.log(`💰 Funding Rates: http://localhost:${ENV.PORT}/api/funding-rates`);
                 console.log(`⚖️ Long/Short Ratio: http://localhost:${ENV.PORT}/api/long-short-ratio`);
+                console.log(`📊 Analysis: http://localhost:${ENV.PORT}/api/analysis`);
+                console.log(`😊 Sentiment: http://localhost:${ENV.PORT}/api/sentiment`);
             });
             
             this.isRunning = true;
-            console.log('✅ Open Interest Collector started successfully');
+            console.log('✅ Open Interest Real-time Analyzer started successfully');
             
         } catch (error) {
-            console.error('❌ Error starting collector:', error);
+            console.error('❌ Error starting analyzer:', error);
             throw error;
         }
     }
 
     stop() {
-        console.log('🛑 Stopping Open Interest Collector...');
+        console.log('🛑 Stopping Open Interest Real-time Analyzer...');
         this.isRunning = false;
         
         if (binanceWS) binanceWS.close();
         if (bybitWS) bybitWS.close();
         if (okxWS) okxWS.close();
         
-        this.pool.end();
-        console.log('✅ Open Interest Collector stopped');
+        console.log('✅ Open Interest Real-time Analyzer stopped');
     }
 }
 
-// Start the collector
-const collector = new OpenInterestCollector();
+// Start the analyzer
+const analyzer = new OpenInterestAnalyzer();
 
 process.on('SIGINT', () => {
     console.log('🛑 Received SIGINT, shutting down...');
-    collector.stop();
+    analyzer.stop();
     process.exit(0);
 });
 
 process.on('SIGTERM', () => {
     console.log('🛑 Received SIGTERM, shutting down...');
-    collector.stop();
+    analyzer.stop();
     process.exit(0);
 });
 
-collector.start().catch(error => {
+analyzer.start().catch(error => {
     console.error('❌ Fatal error:', error);
     process.exit(1);
 });
 
-module.exports = collector; 
+module.exports = analyzer; 

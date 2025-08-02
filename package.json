@@ -1,7 +1,7 @@
 {
   "name": "open-interest-interface",
   "version": "1.0.0",
-  "description": "Real-time Open Interest data collector from major cryptocurrency exchanges",
+  "description": "Real-time Open Interest analyzer without database storage",
   "main": "open_interest_collector.js",
   "scripts": {
     "start": "node open_interest_collector.js",
@@ -28,7 +28,6 @@
     "cors": "^2.8.5",
     "axios": "^1.6.0",
     "ws": "^8.14.2",
-    "pg": "^8.11.3",
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
