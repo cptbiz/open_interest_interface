@@ -300,22 +300,23 @@ class OpenInterestAnalyzer {
                 }
             }
 
-            // Bybit Open Interest
+                        // Bybit Open Interest
             for (const symbol of exchanges.bybit.pairs) {
                 try {
                     const response = await axios.get(`${exchanges.bybit.restUrl}/v5/market/open-interest`, {
-                        params: { 
+                        params: {
                             category: 'linear',
-                            symbol 
+                            symbol,
+                            intervalTime: '0' // Добавляем обязательный параметр
                         },
                         timeout: 5000
                     });
-                    
-                    if (response.data && response.data.result) {
-                        const data = response.data.result;
-                        this.updateOpenInterest('bybit', symbol, 
-                            data.openInterest, 
-                            data.openInterestValue);
+
+                    if (response.data && response.data.result && response.data.result.list) {
+                        const data = response.data.result.list[0];
+                        this.updateOpenInterest('bybit', symbol,
+                            parseFloat(data.openInterest),
+                            parseFloat(data.openInterestValue));
                     }
                 } catch (error) {
                     console.log(`⚠️ Bybit OI for ${symbol}: ${error.message}`);
@@ -437,21 +438,26 @@ class OpenInterestAnalyzer {
         try {
             console.log('🔗 Initializing Binance WebSocket...');
             
-            const pairs = exchanges.binance.pairs.map(pair => pair.toLowerCase() + '@openInterest');
-            const wsUrl = exchanges.binance.wsUrl + pairs.join('/');
-            
-            binanceWS = new WebSocket(wsUrl);
+            // Используем правильный WebSocket URL для Binance
+            binanceWS = new WebSocket('wss://fstream.binance.com/ws');
             
             binanceWS.on('open', () => {
                 console.log('✅ Binance WebSocket connected');
+                const subscribeMsg = {
+                    "method": "SUBSCRIBE",
+                    "params": exchanges.binance.pairs.map(pair => `${pair.toLowerCase()}@openInterest`),
+                    "id": 1
+                };
+                binanceWS.send(JSON.stringify(subscribeMsg));
+                console.log('✉️ Sent Binance subscription request');
             });
             
             binanceWS.on('message', async (data) => {
                 try {
                     const message = JSON.parse(data);
-                    if (message.data) {
-                        const { symbol, openInterest, openInterestValue } = message.data;
-                        this.updateOpenInterest('binance', symbol, openInterest, openInterestValue);
+                    if (message.e === 'open_interest') {
+                        const { s: symbol, oi: openInterest, oiv: openInterestValue } = message;
+                        this.updateOpenInterest('binance', symbol, parseFloat(openInterest), parseFloat(openInterestValue));
                     }
                 } catch (error) {
                     console.error('❌ Binance message error:', error);
@@ -476,8 +482,8 @@ class OpenInterestAnalyzer {
         try {
             console.log('🔗 Initializing Bybit WebSocket...');
             
-            const pairs = exchanges.bybit.pairs.map(pair => `"openInterest.${pair}"`);
-            const wsUrl = exchanges.bybit.wsUrl;
+            // Используем правильный WebSocket URL согласно документации Bybit
+            const wsUrl = 'wss://stream.bybit.com/v5/public/linear';
             
             bybitWS = new WebSocket(wsUrl);
             
@@ -485,18 +491,35 @@ class OpenInterestAnalyzer {
                 console.log('✅ Bybit WebSocket connected');
                 const subscribeMsg = {
                     "op": "subscribe",
-                    "args": pairs
+                    "args": exchanges.bybit.pairs.map(pair => `openInterest.${pair}`)
                 };
                 bybitWS.send(JSON.stringify(subscribeMsg));
+                console.log('✉️ Sent Bybit subscription request');
             });
             
             bybitWS.on('message', async (data) => {
                 try {
                     const message = JSON.parse(data);
-                    if (message.data && message.data.length > 0) {
-                        for (const item of message.data) {
-                            const { symbol, openInterest, openInterestValue } = item;
-                            this.updateOpenInterest('bybit', symbol, openInterest, openInterestValue);
+                    
+                    // Обработка ping/pong для поддержания соединения
+                    if (message.op === 'pong') {
+                        console.log('🏓 Bybit pong received');
+                        return;
+                    }
+                    
+                    // Обработка подписки
+                    if (message.op === 'subscribe' && message.success) {
+                        console.log('✅ Bybit subscription confirmed');
+                        return;
+                    }
+                    
+                    // Обработка данных open interest
+                    if (message.topic && message.topic.startsWith('openInterest.')) {
+                        if (message.data && message.data.length > 0) {
+                            for (const item of message.data) {
+                                const { symbol, openInterest, openInterestValue } = item;
+                                this.updateOpenInterest('bybit', symbol, parseFloat(openInterest), parseFloat(openInterestValue));
+                            }
                         }
                     }
                 } catch (error) {
@@ -512,6 +535,13 @@ class OpenInterestAnalyzer {
                 console.log('🔌 Bybit WebSocket disconnected, reconnecting...');
                 setTimeout(() => this.initializeBybitWS(), ENV.WS_RECONNECT_INTERVAL);
             });
+            
+            // Отправляем ping каждые 20 секунд согласно документации Bybit
+            setInterval(() => {
+                if (bybitWS.readyState === WebSocket.OPEN) {
+                    bybitWS.send(JSON.stringify({ "op": "ping" }));
+                }
+            }, 20000);
             
         } catch (error) {
             console.error('❌ Bybit WebSocket initialization error:', error);
