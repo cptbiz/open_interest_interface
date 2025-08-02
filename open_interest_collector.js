@@ -64,6 +64,7 @@ class OpenInterestAnalyzer {
         this.app = express();
         this.setupExpress();
         this.startTime = new Date();
+        this.lastRestUpdate = new Date();
     }
 
     setupExpress() {
@@ -78,7 +79,8 @@ class OpenInterestAnalyzer {
                 service: 'Open Interest Real-time Analyzer',
                 exchanges: Object.keys(exchanges),
                 dataPoints: openInterestData.size,
-                uptime: Date.now() - this.startTime.getTime()
+                uptime: Date.now() - this.startTime.getTime(),
+                lastRestUpdate: this.lastRestUpdate.toISOString()
             });
         });
 
@@ -148,6 +150,23 @@ class OpenInterestAnalyzer {
                 timestamp: new Date().toISOString()
             });
         });
+
+        // Force update from REST APIs
+        this.app.post('/api/force-update', async (req, res) => {
+            try {
+                await this.updateFromRestAPIs();
+                res.json({
+                    success: true,
+                    message: 'Data updated from REST APIs',
+                    timestamp: new Date().toISOString()
+                });
+            } catch (error) {
+                res.status(500).json({
+                    success: false,
+                    error: error.message
+                });
+            }
+        });
     }
 
     updateOpenInterest(exchange, symbol, openInterest, openInterestValue) {
@@ -192,6 +211,77 @@ class OpenInterestAnalyzer {
         
         longShortRatioData.set(key, data);
         console.log(`⚖️ ${exchange} L/S: ${symbol} = ${longShortRatio}`);
+    }
+
+    async updateFromRestAPIs() {
+        console.log('🔄 Updating data from REST APIs...');
+        
+        try {
+            // Binance Open Interest
+            for (const symbol of exchanges.binance.pairs) {
+                try {
+                    const response = await axios.get(`${exchanges.binance.restUrl}/fapi/v1/openInterest`, {
+                        params: { symbol },
+                        timeout: 5000
+                    });
+                    
+                    if (response.data) {
+                        this.updateOpenInterest('binance', symbol, 
+                            response.data.openInterest, 
+                            response.data.openInterestValue);
+                    }
+                } catch (error) {
+                    console.log(`⚠️ Binance OI for ${symbol}: ${error.message}`);
+                }
+            }
+
+            // Binance Funding Rate
+            for (const symbol of exchanges.binance.pairs) {
+                try {
+                    const response = await axios.get(`${exchanges.binance.restUrl}/fapi/v1/fundingRate`, {
+                        params: { symbol, limit: 1 },
+                        timeout: 5000
+                    });
+                    
+                    if (response.data && response.data.length > 0) {
+                        const data = response.data[0];
+                        this.updateFundingRate('binance', symbol, 
+                            parseFloat(data.fundingRate), 
+                            data.nextFundingTime);
+                    }
+                } catch (error) {
+                    console.log(`⚠️ Binance FR for ${symbol}: ${error.message}`);
+                }
+            }
+
+            // Bybit Open Interest
+            for (const symbol of exchanges.bybit.pairs) {
+                try {
+                    const response = await axios.get(`${exchanges.bybit.restUrl}/v5/market/open-interest`, {
+                        params: { 
+                            category: 'linear',
+                            symbol 
+                        },
+                        timeout: 5000
+                    });
+                    
+                    if (response.data && response.data.result) {
+                        const data = response.data.result;
+                        this.updateOpenInterest('bybit', symbol, 
+                            data.openInterest, 
+                            data.openInterestValue);
+                    }
+                } catch (error) {
+                    console.log(`⚠️ Bybit OI for ${symbol}: ${error.message}`);
+                }
+            }
+
+            this.lastRestUpdate = new Date();
+            console.log('✅ REST API update completed');
+            
+        } catch (error) {
+            console.error('❌ REST API update error:', error.message);
+        }
     }
 
     generateAnalysis() {
@@ -292,6 +382,7 @@ class OpenInterestAnalyzer {
             exchanges: Object.keys(exchanges),
             tradingPairs: tradingPairs.length,
             uptime: Date.now() - this.startTime.getTime(),
+            lastRestUpdate: this.lastRestUpdate.toISOString(),
             timestamp: new Date().toISOString()
         };
     }
@@ -389,6 +480,14 @@ class OpenInterestAnalyzer {
             this.initializeBinanceWS();
             this.initializeBybitWS();
             
+            // Initial data load from REST APIs
+            await this.updateFromRestAPIs();
+            
+            // Set up periodic REST API updates
+            setInterval(() => {
+                this.updateFromRestAPIs();
+            }, 60000); // Update every minute
+            
             // Start Express server
             this.app.listen(ENV.PORT, () => {
                 console.log(`🌐 Open Interest Analyzer running on port ${ENV.PORT}`);
@@ -398,6 +497,7 @@ class OpenInterestAnalyzer {
                 console.log(`⚖️ Long/Short Ratio: http://localhost:${ENV.PORT}/api/long-short-ratio`);
                 console.log(`📊 Analysis: http://localhost:${ENV.PORT}/api/analysis`);
                 console.log(`😊 Sentiment: http://localhost:${ENV.PORT}/api/sentiment`);
+                console.log(`🔄 Force Update: POST http://localhost:${ENV.PORT}/api/force-update`);
             });
             
             this.isRunning = true;
